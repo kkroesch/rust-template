@@ -4,9 +4,6 @@ Welcome to the Rust Template Project!
 This repository serves as a template to kickstart your Rust projects.
 It includes a basic structure, common dependencies, and examples to help you get started quickly.
 
-It also provides Github workflow by [zaszi/rust-template](https://github.com/zaszi/rust-template).
-
-
 ## Features
 
 - **Modular Structure**: Organized code with modules and a clear project structure.
@@ -29,8 +26,8 @@ It also provides Github workflow by [zaszi/rust-template](https://github.com/zas
 1. **Clone the repository**:
 
    ```sh
-   git clone https://github.com/yourusername/rust-template-project.git
-   cd rust-template-project
+   git clone https://github.com/kkroesch/rust-template.git
+   cd rust-template
    ```
 
 2. **Build the project**:
@@ -55,9 +52,9 @@ It also provides Github workflow by [zaszi/rust-template](https://github.com/zas
 │   ├── lib.rs
 │   ├── main.rs
 │   ├── config.rs
-│   └── my_module.rs
+│   └── rectangle.rs
 └── tests
-    └── integration_test.rs
+    └── rectangle_test.rs
 ```
 
 - **src/main.rs**: Entry point of the application.
@@ -156,57 +153,6 @@ fn run() -> Result<()> {
     let settings = Settings::new().map_err(|e| format!("Failed to load settings: {}", e))?;
     let notes_dir = shellexpand::tilde(&settings.notes_dir).to_string();
     let drafts_dir = PathBuf::from(&notes_dir).join("drafts");
-    std::fs::create_dir_all(&drafts_dir)
-        .map_err(|e| format!("Failed to create drafts directory: {}", e))?;
-
-    let mut input = String::new();
-    println!("{}", Fixed(8).paint("✏️  Enter your notes. Type a single '.' on a line to save."));
-    let mut rl = Editor::<()>::new();
-    let first_line = rl.readline("# ")?;
-    let first_line = first_line.trim();
-    input.push_str(&format!("# {}\n", first_line));
-
-    loop {
-        let line = rl.readline("> ")?;
-        if line.trim() == "." {
-            break;
-        }
-
-        if line.trim().starts_with('@') {
-            if let Err(err) = commands::handle_command(line.trim(), &mut input) {
-                eprintln!("{}", Red.paint(err));
-            }
-        } else {
-            input.push_str(&line);
-            input.push('\n');
-        }
-    }
-
-    let mut lines = input.lines();
-    if let Some(first_line) = lines.next() {
-        let filename = first_line.trim().replace(" ", "_") + ".md";
-        let file_path = drafts_dir.join(&filename);
-        let mut file = File::create(&file_path)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
-        let user = settings.author.unwrap_or_else(|| "unknown".to_string());
-        let date = Utc::now().to_rfc3339();
-        let header = format!(
-            "---\ntitle: {}\ndate: {}\nauthor: {}\n---\n\n",
-            first_line.trim(),
-            date,
-            user
-        );
-
-        file.write_all(header.as_bytes())
-            .map_err(|e| format!("Failed to write header to file: {}", e))?;
-        file.write_all(input.as_bytes())
-            .map_err(|e| format!("Failed to write to file: {}", e))?;
-
-        println!("{}", Green.paint(format!("Saved to {:?}", file_path)));
-    } else {
-        println!("{}", Red.paint("No input received."));
-    }
-
     Ok(())
 }
 ```
@@ -232,3 +178,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Reqwest](https://github.com/seanmonstar/reqwest)
 - [Scraper](https://github.com/causal-agent/scraper)
 - [Rustyline](https://github.com/kkawakam/rustyline)
+- [zaszi/rust-template](https://github.com/zaszi/rust-template) for the Github workflow.

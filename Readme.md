@@ -80,7 +80,7 @@ author = "default_author"
 
 ```rust
 pub mod config;
-pub mod my_module;
+pub mod rectangle;
 ```
 
 #### src/config.rs
@@ -99,28 +99,6 @@ impl Settings {
         let mut s = config::Config::default();
         s.merge(config::File::with_name("config"))?;
         s.try_into()
-    }
-}
-```
-
-#### src/my_module.rs
-
-```rust
-pub struct MyStruct {
-    pub name: String,
-    pub age: u32,
-}
-
-impl MyStruct {
-    pub fn new(name: &str, age: u32) -> MyStruct {
-        MyStruct {
-            name: name.to_string(),
-            age,
-        }
-    }
-
-    pub fn greet(&self) {
-        println!("Hello, my name is {} and I am {} years old.", self.name, self.age);
     }
 }
 ```

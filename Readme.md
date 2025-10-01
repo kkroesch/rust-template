@@ -76,3 +76,54 @@ This will auto-detect Ubuntu, Debian, or Fedora and install:
 * Node.js, npm, pnpm (via corepack)
 * musl tools for static builds
 * sccache
+
+---
+
+## Jujutsu (jj) Workflow Cheatsheet
+
+* **Clone a repo with Git backend**
+
+  ```
+  jj git clone https://github.com/user/repo.git
+  cd repo
+  ```
+
+* **Create a commit**
+
+  ```
+  jj commit -m "message"
+  ```
+
+* **Amend last commit**
+
+  ```
+  jj amend
+  ```
+
+* **Rebase on top of main (safe, undoable)**
+
+  ```
+  jj git fetch
+  jj rebase -b @ -d origin/main
+  ```
+
+* **Merge main without rebase**
+
+  ```
+  jj git fetch
+  jj new @ origin/main
+  jj commit -m "merge main"
+  ```
+
+* **Undo last operation**
+
+  ```
+  jj undo
+  ```
+
+* **Push to remote (GitHub, GitLab, etc.)**
+
+  ```
+  jj git push
+  ```
+

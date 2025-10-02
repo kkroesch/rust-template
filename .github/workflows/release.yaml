@@ -23,11 +23,7 @@ jobs:
           toolchain: stable
 
       - name: Extract Binary Name from Cargo.toml
-        id: get_name
-        # 'cargo pkgid' gibt die eindeutige Paket-ID aus (z.B. file:///path#my-crate@0.1.0)
-        # Mit 'cut' extrahieren wir daraus sauber den Namen.
-        # Das Ergebnis wird in die GITHUB_ENV geschrieben, damit es in späteren Schritten verfügbar ist.
-        run: echo "BINARY_NAME=$(cargo pkgid | cut -d'#' -f2 | cut -d'@' -f1)" >> $GITHUB_ENV
+        run: echo "BINARY_NAME=$(cargo read-manifest | jq -r .name)" >> $GITHUB_ENV
 
       - name: Build binary
         run: cargo build --release --bin ${{ env.BINARY_NAME }}

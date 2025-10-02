@@ -1,21 +1,16 @@
-name: Build and Release Binaries
+name: Create Release for Rust Project
 
-# Trigger nur bei Tags, die mit 'v' beginnen
 on:
   push:
     tags:
       - "v*"
 
-# Hier kannst du den Namen für die Artefakte konfigurieren
-env:
-  ARTIFACT_NAME: my_rust_binary # Ändere dies zu deinem gewünschten Namen
-
 jobs:
-  build_wheels:
-    name: Build wheels on ${{ matrix.os }}
+  # Dieser Job baut die Binaries und packt sie in Archive
+  build_and_archive:
+    name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      # Definiert die Betriebssysteme, auf denen gebaut werden soll
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
@@ -23,51 +18,55 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Rust
+      - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11" # Du kannst hier deine bevorzugte Python-Version angeben
+      - name: Build binary
+        # WICHTIG: Ersetze 'dein_binary_name' durch den Namen deiner Binary aus Cargo.toml
+        run: cargo build --release --bin dein_binary_name
 
-      - name: Install maturin
-        run: pip install maturin
+      - name: Create Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $BINARY_NAME = "dein_binary_name" # <-- HIER AUCH ERSETZEN
+          $ARCHIVE_NAME = "${BINARY_NAME}-${{ github.ref_name }}-windows-x86_64.zip"
+          Compress-Archive -Path "target/release/$BINARY_NAME.exe" -DestinationPath $ARCHIVE_NAME
 
-      - name: Build wheels
-        # Baut das Rust-Projekt als Python-Wheel
-        # --release sorgt für einen optimierten Build
-        # --out dist legt die fertigen Dateien in den Ordner "dist"
-        run: maturin build --release --out dist
+      - name: Create Archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          BINARY_NAME="dein_binary_name" # <-- HIER AUCH ERSETZEN
+          OS_NAME=$(if [ "${{ runner.os }}" == "macOS" ]; then echo "macos"; else echo "linux"; fi)
+          ARCHIVE_NAME="${BINARY_NAME}-${{ github.ref_name }}-${OS_NAME}-x86_64.tar.gz"
+          tar -czvf $ARCHIVE_NAME -C target/release $BINARY_NAME
 
-      - name: Upload artifacts
-        # Lädt die gebauten Binaries als Artefakte hoch
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}-${{ matrix.os }}
-          path: dist/
+          name: archives-${{ matrix.os }}
+          path: |
+            *.zip
+            *.tar.gz
 
-  # JOB 2: Erstellt das GitHub-Release und lädt die Binaries hoch
+  # Dieser Job erstellt das finale GitHub-Release
   create_release:
     name: Create GitHub Release
-    needs: build_wheels
+    needs: [build_and_archive] # Wartet, bis alle Builds fertig sind
     runs-on: ubuntu-latest
-
-    # === DIESEN BLOCK HINZUFÜGEN ===
     permissions:
-      contents: write # Gibt dem Job die Erlaubnis, Releases zu erstellen und Assets hochzuladen.
+      contents: write # Nötig, um ein Release zu erstellen
 
     steps:
-      - name: Download all wheels
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ${{ env.ARTIFACT_NAME }}
+          path: artifacts # Lädt alle Artefakte in einen Ordner 'artifacts'
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v1
         with:
-          # Dein 'files' Glob-Pattern ist korrekt, solange ARTIFACT_NAME stimmt.
-          files: |
-            ${{ env.ARTIFACT_NAME }}/**/*.whl
+          # Sucht nach allen Archiven in den heruntergeladenen Artefakt-Ordnern
+          files: artifacts/**/*.zip, artifacts/**/*.tar.gz

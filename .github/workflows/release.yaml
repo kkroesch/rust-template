@@ -49,24 +49,25 @@ jobs:
           name: ${{ env.ARTIFACT_NAME }}-${{ matrix.os }}
           path: dist/
 
+  # JOB 2: Erstellt das GitHub-Release und lädt die Binaries hoch
   create_release:
     name: Create GitHub Release
-    # Dieser Job startet erst, nachdem ALLE build_wheels-Jobs erfolgreich waren
     needs: build_wheels
     runs-on: ubuntu-latest
 
+    # === DIESEN BLOCK HINZUFÜGEN ===
+    permissions:
+      contents: write # Gibt dem Job die Erlaubnis, Releases zu erstellen und Assets hochzuladen.
+
     steps:
       - name: Download all wheels
-        # Lädt ALLE zuvor hochgeladenen Artefakte herunter
         uses: actions/download-artifact@v4
         with:
-          # Der Ziel-Ordner, in den alle Artefakte entpackt werden
           path: ${{ env.ARTIFACT_NAME }}
 
       - name: Create Release and Upload Assets
-        # Diese Action erstellt das Release und hängt die Dateien an
         uses: softprops/action-gh-release@v1
         with:
-          # Sucht nach allen .whl Dateien in den heruntergeladenen Ordnern
+          # Dein 'files' Glob-Pattern ist korrekt, solange ARTIFACT_NAME stimmt.
           files: |
             ${{ env.ARTIFACT_NAME }}/**/*.whl

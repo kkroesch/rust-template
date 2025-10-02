@@ -6,7 +6,6 @@ on:
       - "v*"
 
 jobs:
-  # Dieser Job baut die Binaries und packt sie in Archive
   build_and_archive:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -23,25 +22,31 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Extract Binary Name from Cargo.toml
+        id: get_name
+        # 'cargo pkgid' gibt die eindeutige Paket-ID aus (z.B. file:///path#my-crate@0.1.0)
+        # Mit 'cut' extrahieren wir daraus sauber den Namen.
+        # Das Ergebnis wird in die GITHUB_ENV geschrieben, damit es in späteren Schritten verfügbar ist.
+        run: echo "BINARY_NAME=$(cargo pkgid | cut -d'#' -f2 | cut -d'@' -f1)" >> $GITHUB_ENV
+
       - name: Build binary
-        # WICHTIG: Ersetze 'dein_binary_name' durch den Namen deiner Binary aus Cargo.toml
-        run: cargo build --release --bin dein_binary_name
+        run: cargo build --release --bin ${{ env.BINARY_NAME }}
 
       - name: Create Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $BINARY_NAME = "dein_binary_name" # <-- HIER AUCH ERSETZEN
-          $ARCHIVE_NAME = "${BINARY_NAME}-${{ github.ref_name }}-windows-x86_64.zip"
-          Compress-Archive -Path "target/release/$BINARY_NAME.exe" -DestinationPath $ARCHIVE_NAME
+          # GEÄNDERT: Verwendet jetzt die ausgelesene Variable
+          $ARCHIVE_NAME = "${{ env.BINARY_NAME }}-${{ github.ref_name }}-windows-x86_64.zip"
+          Compress-Archive -Path "target/release/${{ env.BINARY_NAME }}.exe" -DestinationPath $ARCHIVE_NAME
 
       - name: Create Archive (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          BINARY_NAME="dein_binary_name" # <-- HIER AUCH ERSETZEN
+          # GEÄNDERT: Verwendet jetzt die ausgelesene Variable
           OS_NAME=$(if [ "${{ runner.os }}" == "macOS" ]; then echo "macos"; else echo "linux"; fi)
-          ARCHIVE_NAME="${BINARY_NAME}-${{ github.ref_name }}-${OS_NAME}-x86_64.tar.gz"
-          tar -czvf $ARCHIVE_NAME -C target/release $BINARY_NAME
+          ARCHIVE_NAME="${{ env.BINARY_NAME }}-${{ github.ref_name }}-${OS_NAME}-x86_64.tar.gz"
+          tar -czvf $ARCHIVE_NAME -C target/release ${{ env.BINARY_NAME }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -51,22 +56,20 @@ jobs:
             *.zip
             *.tar.gz
 
-  # Dieser Job erstellt das finale GitHub-Release
   create_release:
     name: Create GitHub Release
-    needs: [build_and_archive] # Wartet, bis alle Builds fertig sind
+    needs: [build_and_archive]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Nötig, um ein Release zu erstellen
+      contents: write
 
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts # Lädt alle Artefakte in einen Ordner 'artifacts'
+          path: artifacts
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v1
         with:
-          # Sucht nach allen Archiven in den heruntergeladenen Artefakt-Ordnern
           files: artifacts/**/*.zip, artifacts/**/*.tar.gz

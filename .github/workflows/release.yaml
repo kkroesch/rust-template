@@ -58,8 +58,8 @@ jobs:
           TARGET=${{ matrix.target }}
           cargo build --release --target "$TARGET"
 
-      - name: Package artifact
-        shell: bash
+      - name: Package artifact (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME:-dev}"
@@ -68,19 +68,32 @@ jobs:
           OUT="dist"
           mkdir -p "$OUT"
           EXT=""
-          if [[ "$TGT" == *"windows"* ]]; then EXT=".exe"; fi
           BIN_PATH="target/${TGT}/release/${BIN}${EXT}"
           test -f "$BIN_PATH" || { echo "Binary not found: $BIN_PATH"; ls -la target/${TGT}/release || exit 1; }
           PKG="${BIN}-${VERSION}-${TGT}"
           mkdir -p "${PKG}"
           cp "$BIN_PATH" "${PKG}/"
           echo "Built from ${GITHUB_SHA}" > "${PKG}/BUILD_INFO.txt"
-          if [[ "$TGT" == *"windows"* ]]; then
-            powershell -Command "Compress-Archive -Path '${PKG}/*' -DestinationPath '${OUT}/${PKG}.zip'"
-          else
-            tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
-          fi
+          tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
           rm -rf "${PKG}"
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "dev" }
+          $Bin = $env:BIN_NAME
+          $Tgt = "${{ matrix.target }}"
+          $Out = "dist"
+          New-Item -ItemType Directory -Force -Path $Out | Out-Null
+          $Ext = ".exe"
+          $BinPath = "target/$Tgt/release/$Bin$Ext"
+          if (!(Test-Path $BinPath)) { Write-Error "Binary not found: $BinPath" }
+          $Pkg = "$Bin-$Version-$Tgt"
+          New-Item -ItemType Directory -Force -Path $Pkg | Out-Null
+          Copy-Item $BinPath $Pkg/
+          "Built from $env:GITHUB_SHA" | Out-File "$Pkg/BUILD_INFO.txt"
+          Compress-Archive -Path "$Pkg/*" -DestinationPath "$Out/$Pkg.zip"
+          Remove-Item -Recurse -Force $Pkg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

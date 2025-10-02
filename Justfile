@@ -48,11 +48,16 @@ test:
 bench:
     CARGO_INCREMENTAL=1 cargo bench
 
+push message:
+    git add .
+    git commit -m "{{message}}"
+    git push
+
 # Create and push a release tag (GitHub Action will trigger on v* tags)
 publish VERSION:
     git tag v{{VERSION}}
     # Tag ins Remote pushen
-    git push origin v{{VERSION}}   
+    git push origin v{{VERSION}}
     echo "Pushed tag {{VERSION}}"
 
 

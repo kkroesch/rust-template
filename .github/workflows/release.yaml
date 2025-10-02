@@ -1,113 +1,50 @@
-name: release
+name: Build and Release Binaries
 
+# Trigger nur bei Tags, die mit 'v' beginnen
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
+# Hier kannst du den Namen für die Artefakte konfigurieren
 env:
-  BIN_NAME: mycli # <-- setze hier deinen Binary-Namen
-  RUST_TOOLCHAIN: stable
-  CARGO_TERM_COLOR: always
+  ARTIFACT_NAME: my_rust_binary # Ändere dies zu deinem gewünschten Namen
 
 jobs:
-  build:
-    name: build ${{ matrix.target }}
+  build_wheels:
+    name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      # Definiert die Betriebssysteme, auf denen gebaut werden soll
       matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            pack: tar
-            strip_cmd: "strip"
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            pack: tar
-            strip_cmd: "strip"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            pack: zip
-            strip_cmd: "" # no strip on Windows
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain & target
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          targets: ${{ matrix.target }}
+          toolchain: stable
 
-      - name: Cache cargo registry and target dir
-        uses: actions/cache@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          python-version: "3.11" # Du kannst hier deine bevorzugte Python-Version angeben
 
-      - name: Build
-        run: |
-          set -euo pipefail
-          TARGET=${{ matrix.target }}
-          cargo build --release --target "$TARGET"
+      - name: Install maturin
+        run: pip install maturin
 
-      - name: Package artifact (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME:-dev}"
-          BIN="${{ env.BIN_NAME }}"
-          TGT="${{ matrix.target }}"
-          OUT="dist"
-          mkdir -p "$OUT"
-          EXT=""
-          BIN_PATH="target/${TGT}/release/${BIN}${EXT}"
-          test -f "$BIN_PATH" || { echo "Binary not found: $BIN_PATH"; ls -la target/${TGT}/release || exit 1; }
-          PKG="${BIN}-${VERSION}-${TGT}"
-          mkdir -p "${PKG}"
-          cp "$BIN_PATH" "${PKG}/"
-          echo "Built from ${GITHUB_SHA}" > "${PKG}/BUILD_INFO.txt"
-          tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
-          rm -rf "${PKG}"
+      - name: Build wheels
+        # Baut das Rust-Projekt als Python-Wheel
+        # --release sorgt für einen optimierten Build
+        # --out dist legt die fertigen Dateien in den Ordner "dist"
+        run: maturin build --release --out dist
 
-      - name: Package artifact (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "dev" }
-          $Bin = $env:BIN_NAME
-          $Tgt = "${{ matrix.target }}"
-          $Out = "dist"
-          New-Item -ItemType Directory -Force -Path $Out | Out-Null
-          $Ext = ".exe"
-          $BinPath = "target/$Tgt/release/$Bin$Ext"
-          if (!(Test-Path $BinPath)) { Write-Error "Binary not found: $BinPath" }
-          $Pkg = "$Bin-$Version-$Tgt"
-          New-Item -ItemType Directory -Force -Path $Pkg | Out-Null
-          Copy-Item $BinPath $Pkg/
-          "Built from $env:GITHUB_SHA" | Out-File "$Pkg/BUILD_INFO.txt"
-          Compress-Archive -Path "$Pkg/*" -DestinationPath "$Out/$Pkg.zip"
-          Remove-Item -Recurse -Force $Pkg
-
-      - name: Upload artifact
+      - name: Upload artifacts
+        # Lädt die gebauten Binaries als Artefakte hoch
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BIN_NAME }}-${{ matrix.target }}
-          path: dist/*
-
-      - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-permissions:
-  contents: write
+          name: ${{ env.ARTIFACT_NAME }}-${{ matrix.os }}
+          path: dist/

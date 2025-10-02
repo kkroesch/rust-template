@@ -12,39 +12,28 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
       - name: Extract Binary Name from Cargo.toml
         shell: bash
         run: echo "BINARY_NAME=$(cargo read-manifest | jq -r .name)" >> $GITHUB_ENV
-
       - name: Build binary
         run: cargo build --release --bin ${{ env.BINARY_NAME }}
-
       - name: Create Archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # GEÄNDERT: Verwendet jetzt die ausgelesene Variable
           $ARCHIVE_NAME = "${{ env.BINARY_NAME }}-${{ github.ref_name }}-windows-x86_64.zip"
           Compress-Archive -Path "target/release/${{ env.BINARY_NAME }}.exe" -DestinationPath $ARCHIVE_NAME
-
       - name: Create Archive (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          # GEÄNDERT: Verwendet jetzt die ausgelesene Variable
           OS_NAME=$(if [ "${{ runner.os }}" == "macOS" ]; then echo "macos"; else echo "linux"; fi)
           ARCHIVE_NAME="${{ env.BINARY_NAME }}-${{ github.ref_name }}-${OS_NAME}-x86_64.tar.gz"
           tar -czvf $ARCHIVE_NAME -C target/release ${{ env.BINARY_NAME }}
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -59,14 +48,48 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
+      # NEU: Git-Repository auschecken (mit kompletter History)
+      # Wir brauchen den Code, um die Git-Logs lesen zu können.
+      # fetch-depth: 0 ist entscheidend, damit wir die gesamte History inkl. aller Tags haben.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      # NEU: Release Notes generieren und in eine Datei schreiben
+      - name: Generate release notes
+        shell: bash
+        run: |
+          # Dieselbe Logik wie im just-Task
+          LATEST_TAG="${{ github.ref_name }}" # Der getriggerte Tag ist unser neuester Tag
+          PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -v "^${LATEST_TAG/refs\/tags\//}$" | head -n 1)
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            TAG_RANGE="${LATEST_TAG/refs\/tags\//}"
+            HEADING="# Release Notes for ${LATEST_TAG/refs\/tags\//}"
+          else
+            TAG_RANGE="${PREVIOUS_TAG}..${LATEST_TAG/refs\/tags\//}"
+            HEADING="# Changes since ${PREVIOUS_TAG}"
+          fi
+
+          echo "INFO: Generating notes for range: $TAG_RANGE"
+
+          # Schreibe den Header und die sortierte, eindeutige Liste der Commits in eine Datei
+          {
+            echo "${HEADING}"
+            echo ""
+            git log --no-merges --pretty=format:'- %s' $TAG_RANGE | sort -u
+          } > release-notes.md
+
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v1
         with:
+          # GEÄNDERT: `body_path` verwenden, um die Notizen zu laden
+          body_path: "release-notes.md"
           files: artifacts/**/*.zip, artifacts/**/*.tar.gz

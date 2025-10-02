@@ -60,6 +60,42 @@ publish VERSION:
     git push origin v{{VERSION}}
     echo "Pushed tag {{VERSION}}"
 
+# Usage:
+#   just release-notes          # Prints notes to the terminal
+#   just release-notes > NOTES.md # Saves notes to a file
+release-notes:
+    #!/bin/sh
+    set -e # Exit immediately if a command fails
+
+    # Find the latest tag. Exit if no tags are found.
+    LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
+    if [ -z "$LATEST_TAG" ]; then
+        echo "Error: No tags found in this repository." >&2
+        exit 1
+    fi
+
+    # Find the tag before the latest one.
+    PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -v "^${LATEST_TAG}$" | head -n 1)
+
+    if [ -z "$PREVIOUS_TAG" ]; then
+        # This is the first release. The range is from the first commit to the latest tag.
+        TAG_RANGE=$LATEST_TAG
+        HEADING="# Release Notes for ${LATEST_TAG}"
+    else
+        # This is a subsequent release. The range is between the last two tags.
+        TAG_RANGE="${PREVIOUS_TAG}..${LATEST_TAG}"
+        HEADING="# Changes since ${PREVIOUS_TAG}"
+    fi
+
+    # --- Output the generated notes ---
+    echo "${HEADING}"
+    echo ""
+
+    # Generate the log for the determined range:
+    # --no-merges: Excludes merge commits like "Merge pull request #123..."
+    # --pretty=format:'- %s': Formats each commit as a markdown list item with its subject.
+    # sort -u: Sorts the lines alphabetically and removes exact duplicates.
+    git log --no-merges --pretty=format:'- %s' $TAG_RANGE | sort -u
 
 # --------------------------------------------------
 # Extra targets

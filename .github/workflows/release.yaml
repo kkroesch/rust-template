@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  BIN_NAME: mycli         # <-- setze hier deinen Binary-Namen
+  BIN_NAME: mycli # <-- setze hier deinen Binary-Namen
   RUST_TOOLCHAIN: stable
   CARGO_TERM_COLOR: always
 
@@ -30,7 +30,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             pack: zip
-            strip_cmd: ""  # no strip on Windows
+            strip_cmd: "" # no strip on Windows
 
     steps:
       - uses: actions/checkout@v4
@@ -74,15 +74,11 @@ jobs:
           PKG="${BIN}-${VERSION}-${TGT}"
           mkdir -p "${PKG}"
           cp "$BIN_PATH" "${PKG}/"
-          # include a small README with usage/OS info (optional)
           echo "Built from ${GITHUB_SHA}" > "${PKG}/BUILD_INFO.txt"
-          if [[ "${{ matrix.pack }}" == "tar" ]]; then
-            tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
+          if [[ "$TGT" == *"windows"* ]]; then
+            powershell -Command "Compress-Archive -Path '${PKG}/*' -DestinationPath '${OUT}/${PKG}.zip'"
           else
-            python - <<PY
-import shutil, os
-shutil.make_archive("${OUT}/${PKG}", 'zip', "${PKG}")
-PY
+            tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
           fi
           rm -rf "${PKG}"
 

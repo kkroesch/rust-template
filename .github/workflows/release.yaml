@@ -23,6 +23,7 @@ jobs:
           toolchain: stable
 
       - name: Extract Binary Name from Cargo.toml
+        shell: bash
         run: echo "BINARY_NAME=$(cargo read-manifest | jq -r .name)" >> $GITHUB_ENV
 
       - name: Build binary

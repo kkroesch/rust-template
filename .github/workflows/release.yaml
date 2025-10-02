@@ -7,16 +7,13 @@ on:
   workflow_dispatch:
 
 env:
-  # <<< set your binary name here (Cargo bin) >>>
-  BIN_NAME: mycli
+  BIN_NAME: mycli         # <-- setze hier deinen Binary-Namen
   RUST_TOOLCHAIN: stable
   CARGO_TERM_COLOR: always
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: sccache
 
 jobs:
   build:
-    name: build (${{ matrix.target }})
+    name: build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,44 +21,44 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            strip: strip
             pack: tar
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            strip: strip
-            pack: tar
+            strip_cmd: "strip"
           - os: macos-latest
-            target: aarch64-apple-darwin
-            strip: strip
+            target: x86_64-apple-darwin
             pack: tar
+            strip_cmd: "strip"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            strip: ""        # strip not used on Windows
             pack: zip
+            strip_cmd: ""  # no strip on Windows
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust toolchain & target
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.target }}
 
-      - name: Setup sccache cache
-        uses: mozilla-actions/sccache-action@v0.0.4
-
-      - name: MUSL deps (Linux-musl only)
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
+      - name: Cache cargo registry and target dir
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Build
         run: |
-          cargo build --release --target ${{ matrix.target }}
+          set -euo pipefail
+          TARGET=${{ matrix.target }}
+          cargo build --release --target "$TARGET"
 
-      - name: Prepare artifact
+      - name: Package artifact
         shell: bash
         run: |
           set -euo pipefail
@@ -70,23 +67,22 @@ jobs:
           TGT="${{ matrix.target }}"
           OUT="dist"
           mkdir -p "$OUT"
-          # binary path + extension
           EXT=""
-          [[ "$TGT" == *"windows"* ]] && EXT=".exe"
+          if [[ "$TGT" == *"windows"* ]]; then EXT=".exe"; fi
           BIN_PATH="target/${TGT}/release/${BIN}${EXT}"
-          test -f "$BIN_PATH" || { echo "Binary not found: $BIN_PATH"; exit 1; }
-          # strip if available (non-Windows)
-          if [[ -n "${{ matrix.strip }}" ]]; then
-            ${{ matrix.strip }} "$BIN_PATH" || true
-          fi
+          test -f "$BIN_PATH" || { echo "Binary not found: $BIN_PATH"; ls -la target/${TGT}/release || exit 1; }
           PKG="${BIN}-${VERSION}-${TGT}"
           mkdir -p "${PKG}"
           cp "$BIN_PATH" "${PKG}/"
-          # package
+          # include a small README with usage/OS info (optional)
+          echo "Built from ${GITHUB_SHA}" > "${PKG}/BUILD_INFO.txt"
           if [[ "${{ matrix.pack }}" == "tar" ]]; then
             tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
           else
-            powershell -Command "Compress-Archive -Path '${PKG}\\*' -DestinationPath '${OUT}\\${PKG}.zip'"
+            python - <<PY
+import shutil, os
+shutil.make_archive("${OUT}/${PKG}", 'zip', "${PKG}")
+PY
           fi
           rm -rf "${PKG}"
 
@@ -106,4 +102,3 @@ jobs:
 
 permissions:
   contents: write
-

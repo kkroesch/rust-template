@@ -1,10 +1,12 @@
 # Justfile for Rust workflows with sccache + mold/lld + musl builds
 
 set shell := ["bash", "-cu"]
+crate := 'rust-template'
 
 # Compiler acceleration
 export RUSTC_WRAPPER := "sccache"
 export RUSTFLAGS := "-C link-arg=-fuse-ld=mold"
+
 
 default:
     just dev-fast
@@ -45,6 +47,14 @@ test:
 # Run benchmarks
 bench:
     CARGO_INCREMENTAL=1 cargo bench
+
+# Create and push a release tag (GitHub Action will trigger on v* tags)
+publish VERSION:
+    git tag v{{VERSION}}
+    # Tag ins Remote pushen
+    git push origin v{{VERSION}}   
+    echo "Pushed tag {{VERSION}}"
+
 
 # --------------------------------------------------
 # Extra targets

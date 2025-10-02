@@ -1,0 +1,109 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  # <<< set your binary name here (Cargo bin) >>>
+  BIN_NAME: mycli
+  RUST_TOOLCHAIN: stable
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: sccache
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            strip: strip
+            pack: tar
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            strip: strip
+            pack: tar
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            strip: strip
+            pack: tar
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            strip: ""        # strip not used on Windows
+            pack: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+
+      - name: Setup sccache cache
+        uses: mozilla-actions/sccache-action@v0.0.4
+
+      - name: MUSL deps (Linux-musl only)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          BIN="${{ env.BIN_NAME }}"
+          TGT="${{ matrix.target }}"
+          OUT="dist"
+          mkdir -p "$OUT"
+          # binary path + extension
+          EXT=""
+          [[ "$TGT" == *"windows"* ]] && EXT=".exe"
+          BIN_PATH="target/${TGT}/release/${BIN}${EXT}"
+          test -f "$BIN_PATH" || { echo "Binary not found: $BIN_PATH"; exit 1; }
+          # strip if available (non-Windows)
+          if [[ -n "${{ matrix.strip }}" ]]; then
+            ${{ matrix.strip }} "$BIN_PATH" || true
+          fi
+          PKG="${BIN}-${VERSION}-${TGT}"
+          mkdir -p "${PKG}"
+          cp "$BIN_PATH" "${PKG}/"
+          # package
+          if [[ "${{ matrix.pack }}" == "tar" ]]; then
+            tar -czf "${OUT}/${PKG}.tar.gz" "${PKG}"
+          else
+            powershell -Command "Compress-Archive -Path '${PKG}\\*' -DestinationPath '${OUT}\\${PKG}.zip'"
+          fi
+          rm -rf "${PKG}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-${{ matrix.target }}
+          path: dist/*
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
+

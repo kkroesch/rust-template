@@ -1,0 +1,11 @@
+[template]
+cargo_generate_version = ">=0.17.0"
+
+[project]
+name = "project-name"
+
+[git]
+init = true
+
+[hooks]
+post = ["pre-commit install", "cargo build"]
